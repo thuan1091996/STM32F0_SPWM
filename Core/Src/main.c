@@ -17,12 +17,11 @@
   ******************************************************************************
   */
 /* USER CODE END Header */
-
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "tim.h"
 #include "gpio.h"
-#include "stm32f072xb.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -90,16 +89,19 @@ int main(void)
   MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim14, TIM_CHANNEL_1);
+  HAL_TIM_Base_Start_IT(&htim14);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
   }
   /* USER CODE END 3 */
 }
@@ -113,7 +115,8 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Initializes the CPU, AHB and APB busses clocks 
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
@@ -126,7 +129,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  /** Initializes the CPU, AHB and APB busses clocks 
+  /** Initializes the CPU, AHB and APB buses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1;
@@ -141,6 +144,38 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+#define F_PWM 		10000
+#define PWM_RELOAD 	4800
+uint16_t g_duty=1;
+uint16_t g_freqspwm = 50;
+uint16_t g_numpul=0;
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	UNUSED(htim);
+	uint16_t ui16reload=0;
+	static uint8_t ui8_count=0;
+	g_numpul = F_PWM / g_freqspwm;
+
+	if(ui8_count < (g_numpul/2) )
+	{
+		g_duty = (g_duty+1) % 100; //increase to test
+		ui16reload = g_duty * (PWM_RELOAD/100);
+//		__HAL_TIM_SET_COMPARE(&htim14, TIM_CHANNEL_1, ui16reload -1 ); //TODO: CHECK RESULT
+		__HAL_TIM_SET_COMPARE(&htim14, TIM_CHANNEL_1, ui16reload );
+	}
+	else if (ui8_count < g_numpul)
+	{
+		g_duty = 0;
+		ui16reload = g_duty * (PWM_RELOAD/100);
+		__HAL_TIM_SET_COMPARE(&htim14, TIM_CHANNEL_1, ui16reload); //Can't -1 since will cause underflow
+	}
+	else
+	{
+		ui8_count = 0;
+	}
+	ui8_count++;
+
+}
 
 /* USER CODE END 4 */
 
@@ -165,7 +200,7 @@ void Error_Handler(void)
   * @retval None
   */
 void assert_failed(uint8_t *file, uint32_t line)
-{ 
+{
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
