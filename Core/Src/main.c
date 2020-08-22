@@ -26,21 +26,22 @@
 /* USER CODE BEGIN Includes */
 #include "math.h"
 #include "string.h"
+#include "stdbool.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /*!
  * System status
  */
-typedef enum SystemStatus
-{
-	STATUS_READY = 0,
-	STATUS_CHANGE,
-	STATUS_UPDATED,
-}SystemStatus;
+
 
 /* USER CODE BEGIN PTD */
-
+typedef enum SystemStatus
+{
+	STATE_READY = 0,
+	STATE_CHANGE,
+	STATE_UPDATED,
+}SystemStatus;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -59,21 +60,24 @@ typedef enum SystemStatus
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-SystemStatus curstate = STATUS_CHANGE;
+SystemStatus g_pwmstate = STATE_CHANGE;
 uint16_t g_freqspwm =50;
 uint16_t g_numpul=0;
 uint16_t g_runningtable[MAX_SIZE]={0};
 uint16_t g_caltable[MAX_SIZE]={0};
+uint16_t g_countb1press=0;
+volatile bool g_b1pressed = false;
 float fl_radianperstep=0.00;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+/* USER CODE BEGIN PFP */
 void Sys_Init(void);
 void UpdateSineTable(void);
-/* USER CODE BEGIN PFP */
-
+void ButtonsHandler(void);
+void SPWMValueHandler(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -122,23 +126,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	switch (curstate)
-	{
-		case STATUS_CHANGE:
-			g_numpul = F_PWM / g_freqspwm;
-			fl_radianperstep = PI / (g_numpul/2) ;
-			UpdateSineTable();
-			curstate = STATUS_UPDATED;
-			break;
+	SPWMValueHandler();
+	ButtonsHandler();
 
-		case STATUS_UPDATED:
-			memcpy(g_runningtable, g_caltable, sizeof(uint16_t)*(g_numpul/2) );
-			curstate = STATUS_READY;
-			break;
-
-		default:
-			break;
-	}
   }
   /* USER CODE END 3 */
 }
@@ -187,13 +177,67 @@ void Sys_Init(void)
 	HAL_TIM_Base_Start_IT(&htim14);
 }
 
+void SPWMValueHandler(void)
+{
+	switch (g_pwmstate)
+	{
+		case STATE_CHANGE:
+			g_numpul = F_PWM / g_freqspwm;
+			fl_radianperstep = PI / (g_numpul/2);
+			UpdateSineTable();
+			g_pwmstate = STATE_UPDATED;
+			break;
+
+		case STATE_UPDATED:
+			memset(g_runningtable, 0, (sizeof(g_runningtable[0])*MAX_SIZE));
+			memcpy(g_runningtable, g_caltable, sizeof(g_runningtable[0])*(g_numpul/2) );
+			g_pwmstate = STATE_READY;
+			break;
+
+		default:
+			break;
+	}
+}
+
 void UpdateSineTable(void)
 {
+	memset(g_caltable, 0, (sizeof(g_caltable[0])*MAX_SIZE));
 	for (int ui16index = 0; ui16index < g_numpul/2; ++ui16index)
 	{
 		g_caltable[ui16index] = (uint16_t) (PWM_RELOAD * sinf(fl_radianperstep * ui16index));
 	}
 }
+
+void ButtonsHandler(void)
+{
+	if (g_b1pressed == true)
+	{
+		if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) //Release
+		{
+			if(g_countb1press <100)
+			{
+
+			}
+			else
+			{
+				g_freqspwm++;
+				g_pwmstate = STATE_CHANGE;
+			}
+			g_b1pressed = false;
+			g_countb1press = 0;
+		}
+	}
+
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if (GPIO_Pin == B1_Pin)
+	{
+		g_b1pressed = true;
+	}
+}
+
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
