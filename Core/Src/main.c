@@ -24,7 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,6 +44,14 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+#define F_PWM 		10000
+#define PWM_RELOAD 	4800
+#define PI			3.141592
+
+uint16_t g_freqspwm = 50;
+uint16_t g_numpul=0;
+float fl_radianperstep;
+uint16_t temp_arr[2000]={0};
 
 /* USER CODE END PV */
 
@@ -91,6 +99,8 @@ int main(void)
   HAL_TIM_PWM_Start(&htim14, TIM_CHANNEL_1);
   HAL_TIM_Base_Start_IT(&htim14);
 
+  g_numpul = F_PWM / g_freqspwm;
+  fl_radianperstep = PI / (g_numpul/2) ;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -144,36 +154,25 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-#define F_PWM 		10000
-#define PWM_RELOAD 	4800
-uint16_t g_duty=1;
-uint16_t g_freqspwm = 50;
-uint16_t g_numpul=0;
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	UNUSED(htim);
-	uint16_t ui16reload=0;
-	static uint8_t ui8_count=0;
-	g_numpul = F_PWM / g_freqspwm;
-
-	if(ui8_count < (g_numpul/2) )
+	static uint16_t ui16count=0;
+	uint16_t ui16reload = 0;
+	if(ui16count < (g_numpul/2) )
 	{
-		g_duty = (g_duty+1) % 100; //increase to test
-		ui16reload = g_duty * (PWM_RELOAD/100);
-//		__HAL_TIM_SET_COMPARE(&htim14, TIM_CHANNEL_1, ui16reload -1 ); //TODO: CHECK RESULT
+		ui16reload = (uint16_t) (PWM_RELOAD * sinf(fl_radianperstep * ui16count));
 		__HAL_TIM_SET_COMPARE(&htim14, TIM_CHANNEL_1, ui16reload );
 	}
-	else if (ui8_count < g_numpul)
+	else if (ui16count < g_numpul)
 	{
-		g_duty = 0;
-		ui16reload = g_duty * (PWM_RELOAD/100);
-		__HAL_TIM_SET_COMPARE(&htim14, TIM_CHANNEL_1, ui16reload); //Can't -1 since will cause underflow
+		__HAL_TIM_SET_COMPARE(&htim14, TIM_CHANNEL_1, 0);
 	}
 	else
 	{
-		ui8_count = 0;
+		ui16count = 0;
 	}
-	ui8_count++;
+	ui16count++;
 
 }
 

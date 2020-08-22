@@ -46,7 +46,8 @@ void MX_TIM14_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 2400 - 1;
+//  sConfigOC.Pulse = 2400 - 1;	//TODO: FREE ME
+  sConfigOC.Pulse = 1200 - 1;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim14, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
