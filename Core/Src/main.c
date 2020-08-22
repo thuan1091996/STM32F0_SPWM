@@ -25,15 +25,30 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "math.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
+/*!
+ * System status
+ */
+typedef enum SystemStatus
+{
+	STATUS_READY = 0,
+	STATUS_CHANGE,
+	STATUS_UPDATED,
+}SystemStatus;
+
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define F_PWM 		10000
+#define PWM_RELOAD 	4800
+#define PI			3.141592
+#define MAX_SIZE	2000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -44,19 +59,19 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-#define F_PWM 		10000
-#define PWM_RELOAD 	4800
-#define PI			3.141592
-
-uint16_t g_freqspwm = 50;
+SystemStatus curstate = STATUS_CHANGE;
+uint16_t g_freqspwm =50;
 uint16_t g_numpul=0;
-float fl_radianperstep;
-uint16_t temp_arr[2000]={0};
+uint16_t g_runningtable[MAX_SIZE]={0};
+uint16_t g_caltable[MAX_SIZE]={0};
+float fl_radianperstep=0.00;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void Sys_Init(void);
+void UpdateSineTable(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -96,11 +111,7 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_PWM_Start(&htim14, TIM_CHANNEL_1);
-  HAL_TIM_Base_Start_IT(&htim14);
-
-  g_numpul = F_PWM / g_freqspwm;
-  fl_radianperstep = PI / (g_numpul/2) ;
+  Sys_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -111,7 +122,23 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	switch (curstate)
+	{
+		case STATUS_CHANGE:
+			g_numpul = F_PWM / g_freqspwm;
+			fl_radianperstep = PI / (g_numpul/2) ;
+			UpdateSineTable();
+			curstate = STATUS_UPDATED;
+			break;
 
+		case STATUS_UPDATED:
+			memcpy(g_runningtable, g_caltable, sizeof(uint16_t)*(g_numpul/2) );
+			curstate = STATUS_READY;
+			break;
+
+		default:
+			break;
+	}
   }
   /* USER CODE END 3 */
 }
@@ -154,6 +181,20 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void Sys_Init(void)
+{
+	HAL_TIM_PWM_Start(&htim14, TIM_CHANNEL_1);
+	HAL_TIM_Base_Start_IT(&htim14);
+}
+
+void UpdateSineTable(void)
+{
+	for (int ui16index = 0; ui16index < g_numpul/2; ++ui16index)
+	{
+		g_caltable[ui16index] = (uint16_t) (PWM_RELOAD * sinf(fl_radianperstep * ui16index));
+	}
+}
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	UNUSED(htim);
@@ -161,7 +202,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	uint16_t ui16reload = 0;
 	if(ui16count < (g_numpul/2) )
 	{
-		ui16reload = (uint16_t) (PWM_RELOAD * sinf(fl_radianperstep * ui16count));
+		ui16reload = g_runningtable[ui16count];
 		__HAL_TIM_SET_COMPARE(&htim14, TIM_CHANNEL_1, ui16reload );
 	}
 	else if (ui16count < g_numpul)
