@@ -46,10 +46,12 @@ typedef enum SystemStatus
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define F_PWM 		10000
-#define PWM_RELOAD 	4800
+#define F_PWM 		10000			//Tần số xung nhỏ
+#define PWM_RELOAD 	4800			//Giá trị nạp timer (Max)
 #define PI			3.141592
 #define MAX_SIZE	2000
+#define	START_FREQ	10				//Giá trị tần số mặc định
+#define BUTTON_STEP	5				//Giá trị thay đổi mỗi lần ấn nút nhấn
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -60,14 +62,14 @@ typedef enum SystemStatus
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-SystemStatus g_pwmstate = STATE_CHANGE;
-uint16_t g_freqspwm =50;
-uint16_t g_numpul=0;
-uint16_t g_runningtable[MAX_SIZE]={0};
-uint16_t g_caltable[MAX_SIZE]={0};
+SystemStatus g_pwmstate=STATE_CHANGE;		//Trạng thái PWM (Thay đổi, Tính toán, cập nhật)
+uint16_t g_freqspwm=START_FREQ;				//Tần số xung lớn
+uint16_t g_numpul=0;						//Số xung nhỏ
+uint16_t g_runningtable[MAX_SIZE]={0};		//Bảng chứa giá trị chạy
+uint16_t g_caltable[MAX_SIZE]={0};			//Bảng chứa giá trị tính toán khi thay đổi
 uint16_t g_countb1press=0;
+float fl_radianperstep=0.00;				//Số radian (pi <=> 180 độ) mỗi xung
 volatile bool g_b1pressed = false;
-float fl_radianperstep=0.00;
 
 /* USER CODE END PV */
 
@@ -171,24 +173,30 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+/* Khởi tạo Timer
+ *
+ */
 void Sys_Init(void)
 {
-	HAL_TIM_PWM_Start(&htim14, TIM_CHANNEL_1);
-	HAL_TIM_Base_Start_IT(&htim14);
+	HAL_TIM_PWM_Start(&htim14, TIM_CHANNEL_1); 	//Start PWM
+	HAL_TIM_Base_Start_IT(&htim14);				//Start timer interrupt overflow
 }
 
+/*
+ * Xử lý tần số PWM
+ */
 void SPWMValueHandler(void)
 {
 	switch (g_pwmstate)
 	{
-		case STATE_CHANGE:
+		case STATE_CHANGE:	//Giá trị tần số thay đổi-> Tính lại số xung và bảng giá trị
 			g_numpul = F_PWM / g_freqspwm;
 			fl_radianperstep = PI / (g_numpul/2);
 			UpdateSineTable();
 			g_pwmstate = STATE_UPDATED;
 			break;
 
-		case STATE_UPDATED:
+		case STATE_UPDATED:	//Tính toán xong, copy giá trị từ bảng phụ -> bảng chạy
 			memset(g_runningtable, 0, (sizeof(g_runningtable[0])*MAX_SIZE));
 			memcpy(g_runningtable, g_caltable, sizeof(g_runningtable[0])*(g_numpul/2) );
 			g_pwmstate = STATE_READY;
@@ -199,6 +207,9 @@ void SPWMValueHandler(void)
 	}
 }
 
+/*
+ *  Copy giá trị bảng phụ -> Bảng chạy
+ */
 void UpdateSineTable(void)
 {
 	memset(g_caltable, 0, (sizeof(g_caltable[0])*MAX_SIZE));
@@ -208,6 +219,9 @@ void UpdateSineTable(void)
 	}
 }
 
+/*
+ * Xử lý nút nhấn
+ */
 void ButtonsHandler(void)
 {
 	if (g_b1pressed == true)
@@ -220,7 +234,7 @@ void ButtonsHandler(void)
 			}
 			else
 			{
-				g_freqspwm++;
+				g_freqspwm += BUTTON_STEP;
 				g_pwmstate = STATE_CHANGE;
 			}
 			g_b1pressed = false;
